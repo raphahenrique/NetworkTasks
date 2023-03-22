@@ -1,2 +1,3 @@
 # NetworkTasks
-A simple network library to be used in personal projects
+
+A simple network SDK using Swift Package Manager.
