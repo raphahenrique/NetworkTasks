@@ -27,13 +27,14 @@ public protocol NetworkRequest {
 
 public class NetworkTasks {
     
-    public typealias CompletionHandler<T: Decodable> = (Result<T>) -> Void
+    public typealias CompletionHandlerDecoded<T: Decodable> = (Result<T>) -> Void
+    public typealias CompletionHandlerData = (Result<Data>) -> Void
     
     public static let shared = NetworkTasks()
     
     private let session = URLSession.shared
     
-    public func send<T: Decodable>(_ request: any NetworkRequest, completion: @escaping CompletionHandler<T>) {
+    public func send<T: Decodable>(_ request: any NetworkRequest, completion: @escaping CompletionHandlerDecoded<T>) {
         guard let url = URL(string: request.endpoint) else {
             completion(.failure(NetworkError.invalidURL))
             return
@@ -81,5 +82,53 @@ public class NetworkTasks {
             }
         }.resume()
     }
+    
+    public func send(_ request: any NetworkRequest,
+                      completion: @escaping CompletionHandlerData) {
+        guard let url = URL(string: request.endpoint) else {
+            completion(.failure(NetworkError.invalidURL))
+            return
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = request.method.rawValue
+
+        if let parameters = request.parameters {
+            if request.method == .get {
+                let queryItems = parameters.map {
+                    URLQueryItem(name: $0.key, value: "\($0.value)")
+                }
+                var urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                urlComponents?.queryItems = queryItems
+                urlRequest.url = urlComponents?.url
+            } else {
+                let data = try? JSONSerialization.data(withJSONObject: parameters, options: [])
+                urlRequest.httpBody = data
+            }
+        }
+
+        if let headers = request.headers {
+            headers.forEach { key, value in
+                urlRequest.addValue(value, forHTTPHeaderField: key)
+            }
+        }
+
+        session.dataTask(with: urlRequest) { data, response, error in
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let data = data else {
+                completion(.failure(NetworkError.emptyData))
+                return
+            }
+
+            do {
+                completion(.success(data))
+            }
+        }.resume()
+    }
+
 }
 
